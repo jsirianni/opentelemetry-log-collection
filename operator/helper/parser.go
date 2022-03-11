@@ -16,11 +16,13 @@ package helper
 
 import (
 	"context"
+	"fmt"
 
 	"go.uber.org/zap"
 
 	"github.com/open-telemetry/opentelemetry-log-collection/entry"
 	"github.com/open-telemetry/opentelemetry-log-collection/errors"
+	"github.com/open-telemetry/opentelemetry-log-collection/operator/cache"
 )
 
 // NewParserConfig creates a new parser config with default values
@@ -43,6 +45,8 @@ type ParserConfig struct {
 	TimeParser           *TimeParser           `mapstructure:"timestamp,omitempty" json:"timestamp,omitempty" yaml:"timestamp,omitempty"`
 	SeverityParserConfig *SeverityParserConfig `mapstructure:"severity,omitempty"  json:"severity,omitempty"  yaml:"severity,omitempty"`
 	TraceParser          *TraceParser          `mapstructure:"trace,omitempty"     json:"trace,omitempty"     yaml:"trace,omitempty"`
+
+	CacheConfig `mapstructure:"cache" yaml:"cache"`
 }
 
 // Build will build a parser operator.
@@ -81,6 +85,15 @@ func (c ParserConfig) Build(logger *zap.SugaredLogger) (ParserOperator, error) {
 		parserOperator.TraceParser = c.TraceParser
 	}
 
+	switch c.CacheType {
+	case "":
+		parserOperator.Cache = nil
+	case "memory":
+		parserOperator.Cache = cache.NewMemory(c.CacheMaxSize)
+	default:
+		return parserOperator, fmt.Errorf("invalid cache type: %s", c.CacheType)
+	}
+
 	return parserOperator, nil
 }
 
@@ -93,6 +106,8 @@ type ParserOperator struct {
 	TimeParser     *TimeParser
 	SeverityParser *SeverityParser
 	TraceParser    *TraceParser
+
+	cache.Cache
 }
 
 // ProcessWith will run ParseWith on the entry, then forward the entry on to the next operators.

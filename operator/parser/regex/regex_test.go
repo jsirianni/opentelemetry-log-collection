@@ -81,6 +81,31 @@ func TestParserRegex(t *testing.T) {
 				"a": "b",
 			},
 		},
+		{
+			"MemeoryCache",
+			func(p *RegexParserConfig) {
+				p.Regex = "a=(?P<a>.*)"
+				p.CacheType = "memory"
+			},
+			"a=b",
+			map[string]interface{}{
+				"a": "b",
+			},
+		},
+		{
+			"K8sFileCache",
+			func(p *RegexParserConfig) {
+				p.Regex = `^(?P<pod_name>[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*)_(?P<namespace>[^_]+)_(?P<container_name>.+)-(?P<container_id>[a-z0-9]{64})\.log$`
+				p.CacheType = "memory"
+			},
+			"coredns-5644d7b6d9-mzngq_kube-system_coredns-901f7510281180a402936c92f5bc0f3557f5a21ccb5a4591c5bf98f3ddbffdd6.log",
+			map[string]interface{}{
+				"container_id":   "901f7510281180a402936c92f5bc0f3557f5a21ccb5a4591c5bf98f3ddbffdd6",
+				"container_name": "coredns",
+				"namespace":      "kube-system",
+				"pod_name":       "coredns-5644d7b6d9-mzngq",
+			},
+		},
 	}
 
 	for _, tc := range cases {
@@ -101,6 +126,12 @@ func TestParserRegex(t *testing.T) {
 			require.NoError(t, err)
 
 			fake.ExpectBody(t, tc.outputBody)
+
+			regexOp := op.(*RegexParser)
+			cacheKey := tc.inputBody.(string)
+			cacheOut, ok := regexOp.Get(cacheKey)
+			require.True(t, ok, "expected cache key to exist")
+			require.Equal(t, entry, cacheOut)
 		})
 	}
 }

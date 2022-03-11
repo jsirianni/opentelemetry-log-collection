@@ -93,15 +93,26 @@ func (r *RegexParser) Process(ctx context.Context, entry *entry.Entry) error {
 
 // parse will parse a value using the supplied regex.
 func (r *RegexParser) parse(value interface{}) (interface{}, error) {
-	var matches []string
+	var raw string
 	switch m := value.(type) {
 	case string:
-		matches = r.regexp.FindStringSubmatch(m)
-		if matches == nil {
-			return nil, fmt.Errorf("regex pattern does not match")
-		}
+		raw = m
 	default:
 		return nil, fmt.Errorf("type '%T' cannot be parsed as regex", value)
+	}
+	return r.match(raw)
+}
+
+func (r *RegexParser) match(value string) (interface{}, error) {
+	if r.Cache != nil {
+		if cacheResult, ok := r.Cache.Get(value); ok {
+			return cacheResult, nil
+		}
+	}
+
+	matches := r.regexp.FindStringSubmatch(value)
+	if matches == nil {
+		return nil, fmt.Errorf("regex pattern does not match")
 	}
 
 	parsedValues := map[string]interface{}{}
@@ -113,6 +124,11 @@ func (r *RegexParser) parse(value interface{}) (interface{}, error) {
 		if subexp != "" {
 			parsedValues[subexp] = matches[i]
 		}
+	}
+
+	if r.Cache != nil {
+		r.Cache.Add(value, parsedValues)
+		r.Debugf("created cached entry: %s", value)
 	}
 
 	return parsedValues, nil

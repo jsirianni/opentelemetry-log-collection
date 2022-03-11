@@ -1,0 +1,69 @@
+// Copyright The OpenTelemetry Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package cache
+
+import (
+	"sync"
+	"time"
+)
+
+func NewMemory(maxSize uint) *Memory {
+	m := Memory{}
+	m.cache = make(map[string]item)
+	m.maxSize = int(maxSize)
+	return &m
+}
+
+type Memory struct {
+	cache   map[string]item
+	maxSize int
+	mutex   sync.RWMutex
+}
+
+type item struct {
+	data      interface{}
+	timestamp time.Time
+}
+
+func (m *Memory) Get(key string) (interface{}, bool) {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
+	item, ok := m.cache[key]
+	return item.data, ok
+}
+
+func (m *Memory) Add(key string, data interface{}) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	if m.maxSize > 0 && len(m.cache) == m.maxSize {
+		now := time.Now()
+		oldest := ""
+		for i, _ := range m.cache {
+			if m.cache[i].timestamp.Before(now) {
+				oldest = i
+			}
+		}
+		delete(m.cache, oldest)
+	}
+
+	e := item{
+		data:      data,
+		timestamp: time.Now(),
+	}
+
+	m.cache[key] = e
+}
