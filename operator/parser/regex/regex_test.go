@@ -16,6 +16,9 @@ package regex
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -85,6 +88,7 @@ func TestParserRegex(t *testing.T) {
 			"MemeoryCache",
 			func(p *RegexParserConfig) {
 				p.Regex = "a=(?P<a>.*)"
+				p.ParseTo = entry.NewBodyField()
 				p.CacheType = "memory"
 			},
 			"a=b",
@@ -127,11 +131,17 @@ func TestParserRegex(t *testing.T) {
 
 			fake.ExpectBody(t, tc.outputBody)
 
+			// op is always a RegexParser
 			regexOp := op.(*RegexParser)
-			cacheKey := tc.inputBody.(string)
-			cacheOut, ok := regexOp.Get(cacheKey)
-			require.True(t, ok, "expected cache key to exist")
-			require.Equal(t, entry, cacheOut)
+
+			// If cache is enabled, read it and ensure it is the same
+			// as the entry's body
+			if regexOp.Cache != nil {
+				cacheKey := tc.inputBody.(string)
+				cacheOut, ok := regexOp.Get(cacheKey)
+				require.True(t, ok, "expected cache key to exist")
+				require.Equal(t, entry.Body, cacheOut)
+			}
 		})
 	}
 }
@@ -215,4 +225,122 @@ parse_to: $.to`
 		require.NoError(t, err)
 		require.Equal(t, expect, &actual)
 	})
+}
+
+// return 100 unique file names, example:
+// dafplsjfbcxoeff-5644d7b6d9-mzngq_kube-system_coredns-901f7510281180a402936c92f5bc0f3557f5a21ccb5a4591c5bf98f3ddbffdd6.log
+// rswxpldnjobcsnv-5644d7b6d9-mzngq_kube-system_coredns-901f7510281180a402936c92f5bc0f3557f5a21ccb5a4591c5bf98f3ddbffdd6.log
+// lgtemapezqleqyh-5644d7b6d9-mzngq_kube-system_coredns-901f7510281180a402936c92f5bc0f3557f5a21ccb5a4591c5bf98f3ddbffdd6.log
+func benchParseInput() (patterns []string) {
+	const letterBytes = "abcdefghijklmnopqrstuvwxyz"
+	for i := 1; i <= 100; i++ {
+		b := make([]byte, 15)
+		for i := range b {
+			b[i] = letterBytes[rand.Intn(len(letterBytes))]
+		}
+		randomStr := string(b)
+		p := fmt.Sprintf("%s-5644d7b6d9-mzngq_kube-system_coredns-901f7510281180a402936c92f5bc0f3557f5a21ccb5a4591c5bf98f3ddbffdd6.log", randomStr)
+		patterns = append(patterns, p)
+	}
+	return patterns
+}
+
+// Regex used to parse a kubernetes container log file name, which contains the
+// pod name, namespace, container name, container.
+const benchParsePattern = `^(?P<pod_name>[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*)_(?P<namespace>[^_]+)_(?P<container_name>.+)-(?P<container_id>[a-z0-9]{64})\.log$`
+
+var benchParsePatterns = benchParseInput()
+
+func newTestBenchParser(t *testing.T, regex string, cacheType string, cacheSize uint) *RegexParser {
+	cfg := NewRegexParserConfig("bench")
+	cfg.Regex = regex
+	cfg.CacheConfig.CacheType = cacheType
+	cfg.CacheConfig.CacheMaxSize = cacheSize
+
+	op, err := cfg.Build(testutil.Logger(t))
+	require.NoError(t, err)
+	return op.(*RegexParser)
+}
+
+func benchmarkParseThreaded(b *testing.B, parser *RegexParser, input []string) {
+	wg := sync.WaitGroup{}
+
+	for _, i := range input {
+		wg.Add(1)
+
+		go func(i string) {
+			if _, err := parser.match(i); err != nil {
+				b.Error(err)
+			}
+			wg.Done()
+		}(i)
+	}
+
+	wg.Wait()
+}
+
+func benchmarkParse(b *testing.B, parser *RegexParser, input []string) {
+	for _, i := range input {
+		if _, err := parser.match(i); err != nil {
+			b.Error(err)
+		}
+	}
+}
+
+// No cache
+func BenchmarkParseNoCache(b *testing.B) {
+	parser := newTestBenchParser(&testing.T{}, benchParsePattern, "", 0)
+	for n := 0; n < b.N; n++ {
+		benchmarkParseThreaded(b, parser, benchParsePatterns)
+	}
+}
+
+// Memory cache at capacity
+func BenchmarkParseWithMemoryCache(b *testing.B) {
+	parser := newTestBenchParser(&testing.T{}, benchParsePattern, "memory", 100)
+	for n := 0; n < b.N; n++ {
+		benchmarkParseThreaded(b, parser, benchParsePatterns)
+	}
+}
+
+// Memory cache over capacity by one
+func BenchmarkParseWithMemoryCacheFullByOne(b *testing.B) {
+	parser := newTestBenchParser(&testing.T{}, benchParsePattern, "memory", 99)
+	for n := 0; n < b.N; n++ {
+		benchmarkParseThreaded(b, parser, benchParsePatterns)
+	}
+}
+
+// Memory cache over capacity by 10
+func BenchmarkParseWithMemoryCacheFullBy10(b *testing.B) {
+	parser := newTestBenchParser(&testing.T{}, benchParsePattern, "memory", 90)
+	for n := 0; n < b.N; n++ {
+		benchmarkParseThreaded(b, parser, benchParsePatterns)
+	}
+}
+
+// Memory cache over capacity by 50
+func BenchmarkParseWithMemoryCacheFullBy50(b *testing.B) {
+	parser := newTestBenchParser(&testing.T{}, benchParsePattern, "memory", 50)
+	for n := 0; n < b.N; n++ {
+		benchmarkParseThreaded(b, parser, benchParsePatterns)
+	}
+}
+
+// No cache one file
+func BenchmarkParseNoCacheOneFile(b *testing.B) {
+	parser := newTestBenchParser(&testing.T{}, benchParsePattern, "", 0)
+	for n := 0; n < b.N; n++ {
+		pattern := []string{benchParsePatterns[0]}
+		benchmarkParse(b, parser, pattern)
+	}
+}
+
+// Memory cache one file
+func BenchmarkParseWithMemoryCacheOneFile(b *testing.B) {
+	parser := newTestBenchParser(&testing.T{}, benchParsePattern, "memory", 100)
+	for n := 0; n < b.N; n++ {
+		pattern := []string{benchParsePatterns[0]}
+		benchmarkParse(b, parser, pattern)
+	}
 }

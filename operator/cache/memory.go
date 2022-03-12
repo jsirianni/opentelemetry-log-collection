@@ -16,54 +16,62 @@ package cache
 
 import (
 	"sync"
-	"time"
 )
 
+// NewMemory returns a new Memory cache with a max size
 func NewMemory(maxSize uint) *Memory {
 	m := Memory{}
-	m.cache = make(map[string]item)
+	m.cache = make(map[string]interface{})
+	m.keys = make([]string, 0)
 	m.maxSize = int(maxSize)
 	return &m
 }
 
+// Memory is an in memory cache of items with a pre defined
+// max size
 type Memory struct {
-	cache   map[string]item
+	// Key / Value pairs of cached items
+	cache map[string]interface{}
+
+	// Tracks a list of keys added to the cache, when the
+	// cache is full, the first item in the slice is used
+	// to determine which key / value pair to remove from
+	// the cache because keys[0] will always be the oldest
+	// item in the cache
+	keys []string
+
+	// The max number of items the cache will hold before
+	// it starts to remove items. High load systems should
+	// avoid setting this value too low because performance
+	// degrades significantly when items are being removed
+	// for every addition
 	maxSize int
-	mutex   sync.RWMutex
+
+	// All read options will trigger a read lock while all
+	// write options will trigger a lock
+	mutex sync.RWMutex
 }
 
-type item struct {
-	data      interface{}
-	timestamp time.Time
-}
-
+// Get returns an item from the cache
 func (m *Memory) Get(key string) (interface{}, bool) {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 
-	item, ok := m.cache[key]
-	return item.data, ok
+	data, ok := m.cache[key]
+	return data, ok
 }
 
+// Add inserts an item into the cache, if the cache is full, the
+// oldest item is removed
 func (m *Memory) Add(key string, data interface{}) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
 	if m.maxSize > 0 && len(m.cache) == m.maxSize {
-		now := time.Now()
-		oldest := ""
-		for i, _ := range m.cache {
-			if m.cache[i].timestamp.Before(now) {
-				oldest = i
-			}
-		}
-		delete(m.cache, oldest)
+		delete(m.cache, m.keys[0])
+		m.keys = m.keys[1:]
 	}
 
-	e := item{
-		data:      data,
-		timestamp: time.Now(),
-	}
-
-	m.cache[key] = e
+	m.cache[key] = data
+	m.keys = append(m.keys, key)
 }

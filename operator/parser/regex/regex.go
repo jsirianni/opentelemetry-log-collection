@@ -127,8 +127,8 @@ func (r *RegexParser) match(value string) (interface{}, error) {
 	}
 
 	if r.Cache != nil {
+		// cache the output using the input string as the key
 		r.Cache.Add(value, parsedValues)
-		r.Debugf("created cached entry: %s", value)
 	}
 
 	return parsedValues, nil
