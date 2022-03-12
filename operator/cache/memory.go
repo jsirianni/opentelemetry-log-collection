@@ -18,6 +18,9 @@ import (
 	"sync"
 )
 
+// item is a cache entry that can take any data type
+type item interface{}
+
 // Default max size for Memory cache
 const DefaultMemoryMaxSize uint16 = 100
 
@@ -29,18 +32,20 @@ func NewMemory(maxSize uint16) *Memory {
 	}
 
 	return &Memory{
-		cache: make(map[string]interface{}),
+		cache: make(map[string]item),
 		keys:  make(chan string, maxSize),
 	}
 }
 
 // Memory is an in memory cache of items with a pre defined
-// max size. Memory's underlying storage is a map[string]interface{}
+// max size. Memory's underlying storage is a map[string]item
 // and does not perform any manipulation of the data. Memory
 // is designed to be as fast as possible while being thread safe.
+// When the cache is full, new items will evict the oldest
+// item using a FIFO style queue.
 type Memory struct {
 	// Key / Value pairs of cached items
-	cache map[string]interface{}
+	cache map[string]item
 
 	// When the cache is full, the oldest entry's key is
 	// read from the channel and used to index into the
