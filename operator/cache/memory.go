@@ -29,8 +29,8 @@ func NewMemory(maxSize uint16) *Memory {
 	}
 
 	return &Memory{
-		cache:   make(map[string]interface{}),
-		keys:    make([]string, 0, maxSize),
+		cache:   make(map[string]interface{}, maxSize),
+		keys:    make(chan string, maxSize),
 		maxSize: int(maxSize),
 	}
 }
@@ -43,12 +43,10 @@ type Memory struct {
 	// Key / Value pairs of cached items
 	cache map[string]interface{}
 
-	// Tracks a list of keys added to the cache, when the
-	// cache is full, the first item in the slice is used
-	// to determine which key / value pair to remove from
-	// the cache because keys[0] will always be the oldest
-	// item in the cache
-	keys []string
+	// When the cache is full, the oldest entry's key is
+	// read from the channel and used to index into the
+	// cache during cleanup
+	keys chan string
 
 	// The max number of items the cache will hold before
 	// it starts to remove items. High load systems should
@@ -80,10 +78,13 @@ func (m *Memory) Add(key string, data interface{}) {
 	defer m.mutex.Unlock()
 
 	if len(m.keys) == m.maxSize {
-		delete(m.cache, m.keys[0])
-		m.keys = m.keys[1:]
+		// Pop the oldest key from the channel
+		// and remove it from the cache
+		delete(m.cache, <-m.keys)
 	}
 
+	// Write the cached entry and push it's
+	// key to the channel
 	m.cache[key] = data
-	m.keys = append(m.keys, key)
+	m.keys <- key
 }
