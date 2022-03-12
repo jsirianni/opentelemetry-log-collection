@@ -21,28 +21,41 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-/*func TestNewMemory(t *testing.T) {
+func TestNewMemory(t *testing.T) {
 	cases := []struct {
-		name    string
-		maxSize uint16
-		expect  *Memory
+		name       string
+		maxSize    uint16
+		expect     *Memory
+		expectSize int
 	}{
 		{
 			"default",
 			0,
 			&Memory{
-				cache:   make(map[string]interface{}),
-				keys:    make(chan string, DefaultMemoryMaxSize),
-				maxSize: int(DefaultMemoryMaxSize),
+				cache: make(map[string]interface{}),
+				keys:  make(chan string, DefaultMemoryMaxSize),
 			},
+			int(DefaultMemoryMaxSize),
+		},
+		{
+			"size-50",
+			50,
+			&Memory{
+				cache: make(map[string]interface{}),
+				keys:  make(chan string, 50),
+			},
+			50,
 		},
 	}
 
 	for _, tc := range cases {
 		output := NewMemory(tc.maxSize)
-		require.Equal(t, tc.expect, output)
+		require.Equal(t, tc.expect.cache, output.cache)
+		require.Len(t, output.cache, 0, "new memory should always be empty")
+		require.Len(t, output.keys, 0, "new memory should always be empty")
+		require.Equal(t, tc.expectSize, cap(output.keys), "keys channel should have cap of expected size")
 	}
-}*/
+}
 
 func TestMemory(t *testing.T) {
 	cases := []struct {
@@ -71,7 +84,6 @@ func TestMemory(t *testing.T) {
 						"dev": "stanza",
 					},
 				},
-				maxSize: 3,
 			},
 		},
 	}
@@ -85,7 +97,6 @@ func TestMemory(t *testing.T) {
 				require.Equal(t, value, out, "expected value to equal the value that was added to the cache")
 			}
 
-			require.Equal(t, tc.expect.maxSize, tc.cache.maxSize)
 			require.Equal(t, len(tc.expect.cache), len(tc.cache.cache))
 
 			for expectKey, expectItem := range tc.expect.cache {
@@ -104,7 +115,7 @@ func TestCleanupLast(t *testing.T) {
 	m := NewMemory(uint16(maxSize))
 
 	// Add to cache until it is full
-	for i := 0; i <= m.maxSize; i++ {
+	for i := 0; i <= cap(m.keys); i++ {
 		str := strconv.Itoa(i)
 		m.Add(str, i)
 	}

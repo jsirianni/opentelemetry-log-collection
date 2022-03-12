@@ -29,9 +29,8 @@ func NewMemory(maxSize uint16) *Memory {
 	}
 
 	return &Memory{
-		cache:   make(map[string]interface{}, maxSize),
-		keys:    make(chan string, maxSize),
-		maxSize: int(maxSize),
+		cache: make(map[string]interface{}, maxSize),
+		keys:  make(chan string, maxSize),
 	}
 }
 
@@ -47,13 +46,6 @@ type Memory struct {
 	// read from the channel and used to index into the
 	// cache during cleanup
 	keys chan string
-
-	// The max number of items the cache will hold before
-	// it starts to remove items. High load systems should
-	// avoid setting this value too low because performance
-	// degrades significantly when items are being removed
-	// for every addition
-	maxSize int
 
 	// All read options will trigger a read lock while all
 	// write options will trigger a lock
@@ -77,7 +69,7 @@ func (m *Memory) Add(key string, data interface{}) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	if len(m.keys) == m.maxSize {
+	if len(m.keys) == cap(m.keys) {
 		// Pop the oldest key from the channel
 		// and remove it from the cache
 		delete(m.cache, <-m.keys)
