@@ -20,9 +20,21 @@ This operator makes use of [Go regular expression](https://github.com/google/re2
 | `if`          |                  | An [expression](/docs/types/expression.md) that, when set, will be evaluated to determine whether this operator should be used for the given entry. This allows you to do easy conditional parsing without branching logic with routers. |
 | `timestamp`   | `nil`            | An optional [timestamp](/docs/types/timestamp.md) block which will parse a timestamp field before passing the entry to the output operator. |
 | `severity`    | `nil`            | An optional [severity](/docs/types/severity.md) block which will parse a severity field before passing the entry to the output operator. |
+| `cache`       | `nil`            | An optional `cache` block which will cache `regex_parser`'s output, see the `cache` configuration section. |
+
+### Cache
+
+Regex is an expensive operation, caching is useful when parsing the same value repeatedly. For example, extracting fields derived from kubernetes pod log file names.
+Enabling caching can have a negative effect on memory, therefore it is a good idea to limit the cache size to something realistic.
+
+If caching is enabled, the size
+
+| Field         | Default          | Description                                                     |
+| ---           | ---              | ---                                                             |
+| `type`        | optional         | Cache type to use. Currently, only `memory` cache is supported. |
+| `size`        | `100`            | Max number of items to keep in the cache. The cache will delete the oldest item to make room for a new item when max capacity is reached. |
 
 ### Example Configurations
-
 
 #### Parse the field `message` with a regular expression
 
