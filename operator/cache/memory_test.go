@@ -22,10 +22,26 @@ import (
 )
 
 func TestNewMemory(t *testing.T) {
-	m := NewMemory(11)
-	require.NotNil(t, m.cache)
-	require.NotNil(t, m.keys)
-	require.Equal(t, 11, m.maxSize)
+	cases := []struct {
+		name    string
+		maxSize uint16
+		expect  *Memory
+	}{
+		{
+			"default",
+			0,
+			&Memory{
+				cache:   make(map[string]interface{}),
+				keys:    make([]string, 0),
+				maxSize: int(DefaultMemoryMaxSize),
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		output := NewMemory(tc.maxSize)
+		require.Equal(t, tc.expect, output)
+	}
 }
 
 func TestMemory(t *testing.T) {
@@ -85,7 +101,7 @@ func TestMemory(t *testing.T) {
 func TestCleanupLast(t *testing.T) {
 	maxSize := 10
 
-	m := NewMemory(uint(maxSize))
+	m := NewMemory(uint16(maxSize))
 
 	// Add to cache until it is full
 	for i := 0; i <= m.maxSize; i++ {

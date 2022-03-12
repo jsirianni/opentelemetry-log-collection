@@ -16,5 +16,5 @@ package helper
 
 type CacheConfig struct {
 	CacheType    string `json:"type" yaml:"type"`
-	CacheMaxSize uint   `json:"size" yaml:"size"`
+	CacheMaxSize uint16 `json:"size" yaml:"size"`
 }

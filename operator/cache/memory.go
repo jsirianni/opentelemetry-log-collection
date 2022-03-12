@@ -18,17 +18,27 @@ import (
 	"sync"
 )
 
-// NewMemory returns a new Memory cache with a max size
-func NewMemory(maxSize uint) *Memory {
-	m := Memory{}
-	m.cache = make(map[string]interface{})
-	m.keys = make([]string, 0)
-	m.maxSize = int(maxSize)
-	return &m
+// Default max size for Memory cache
+const DefaultMemoryMaxSize uint16 = 100
+
+// NewMemory returns a new Memory cache with a max size.
+// Uses DefaultMemoryMaxSize if maxSize is 0
+func NewMemory(maxSize uint16) *Memory {
+	if maxSize < 1 {
+		maxSize = DefaultMemoryMaxSize
+	}
+
+	return &Memory{
+		cache:   make(map[string]interface{}),
+		keys:    make([]string, 0, maxSize),
+		maxSize: int(maxSize),
+	}
 }
 
 // Memory is an in memory cache of items with a pre defined
-// max size
+// max size. Memory's underlying storage is a map[string]interface{}
+// and does not perform any manipulation of the data. Memory
+// is designed to be as fast as possible while being thread safe.
 type Memory struct {
 	// Key / Value pairs of cached items
 	cache map[string]interface{}
@@ -52,12 +62,14 @@ type Memory struct {
 	mutex sync.RWMutex
 }
 
-// Get returns an item from the cache
+// Get returns an item from the cache and should be treated
+// the same as indexing a map
 func (m *Memory) Get(key string) (interface{}, bool) {
+	// Read and unlock as fast as possible
 	m.mutex.RLock()
-	defer m.mutex.RUnlock()
-
 	data, ok := m.cache[key]
+	m.mutex.RUnlock()
+
 	return data, ok
 }
 
@@ -67,7 +79,7 @@ func (m *Memory) Add(key string, data interface{}) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	if m.maxSize > 0 && len(m.cache) == m.maxSize {
+	if len(m.keys) == m.maxSize {
 		delete(m.cache, m.keys[0])
 		m.keys = m.keys[1:]
 	}

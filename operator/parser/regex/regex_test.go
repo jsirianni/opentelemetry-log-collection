@@ -251,7 +251,7 @@ const benchParsePattern = `^(?P<pod_name>[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9
 
 var benchParsePatterns = benchParseInput()
 
-func newTestBenchParser(t *testing.T, regex string, cacheType string, cacheSize uint) *RegexParser {
+func newTestBenchParser(t *testing.T, regex string, cacheType string, cacheSize uint16) *RegexParser {
 	cfg := NewRegexParserConfig("bench")
 	cfg.Regex = regex
 	cfg.CacheConfig.CacheType = cacheType
