@@ -29,7 +29,7 @@ func NewMemory(maxSize uint16) *Memory {
 	}
 
 	return &Memory{
-		cache: make(map[string]interface{}, maxSize),
+		cache: make(map[string]interface{}),
 		keys:  make(chan string, maxSize),
 	}
 }
