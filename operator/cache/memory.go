@@ -59,6 +59,8 @@ type Memory struct {
 	mutex sync.RWMutex
 }
 
+var _ Cache = (&Memory{})
+
 // Get returns an item from the cache and should be treated
 // the same as indexing a map
 func (m *Memory) Get(key string) (interface{}, bool) {
@@ -86,4 +88,22 @@ func (m *Memory) Add(key string, data interface{}) {
 	// key to the channel
 	m.cache[key] = data
 	m.keys <- key
+}
+
+// Copy returns a deep copy of the cache
+func (m *Memory) Copy() map[string]interface{} {
+	copy := make(map[string]interface{}, cap(m.keys))
+
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	for k, v := range m.cache {
+		copy[k] = v
+	}
+	return copy
+}
+
+// MaxSize returns the max size of the cache
+func (m *Memory) MaxSize() uint16 {
+	return uint16(cap(m.keys))
 }

@@ -90,6 +90,7 @@ func (c ParserConfig) Build(logger *zap.SugaredLogger) (ParserOperator, error) {
 		parserOperator.Cache = nil
 	case "memory":
 		parserOperator.Cache = cache.NewMemory(c.CacheMaxSize)
+		logger.Debugf("configured %s with memory cache of size %d", parserOperator.ID(), parserOperator.MaxSize())
 	default:
 		return parserOperator, fmt.Errorf("invalid cache type: %s", c.CacheType)
 	}

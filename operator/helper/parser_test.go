@@ -52,6 +52,27 @@ func TestParserConfigInvalidTimeParser(t *testing.T) {
 	require.Contains(t, err.Error(), "missing required configuration parameter `layout`")
 }
 
+func TestParserConfigInvalidCacheType(t *testing.T) {
+	cfg := NewParserConfig("test-id", "test-type")
+	cfg.CacheConfig = CacheConfig{
+		CacheType: "invalid",
+	}
+
+	_, err := cfg.Build(testutil.Logger(t))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid cache type")
+}
+
+func TestParserConfigCacheValid(t *testing.T) {
+	cfg := NewParserConfig("test-id", "test-type")
+	cfg.CacheConfig = CacheConfig{
+		CacheType: "memory",
+	}
+
+	_, err := cfg.Build(testutil.Logger(t))
+	require.NoError(t, err)
+}
+
 func TestParserConfigBuildValid(t *testing.T) {
 	cfg := NewParserConfig("test-id", "test-type")
 	f := entry.NewBodyField("timestamp")

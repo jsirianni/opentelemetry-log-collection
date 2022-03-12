@@ -1,0 +1,4 @@
+type: regex_parser
+cache:
+  type: "memory"
+  size: 50

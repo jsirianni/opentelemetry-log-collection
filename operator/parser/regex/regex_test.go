@@ -26,13 +26,18 @@ import (
 
 	"github.com/open-telemetry/opentelemetry-log-collection/entry"
 	"github.com/open-telemetry/opentelemetry-log-collection/operator"
+	"github.com/open-telemetry/opentelemetry-log-collection/operator/cache"
 	"github.com/open-telemetry/opentelemetry-log-collection/operator/helper"
 	"github.com/open-telemetry/opentelemetry-log-collection/testutil"
 )
 
-func newTestParser(t *testing.T, regex string) *RegexParser {
+func newTestParser(t *testing.T, regex string, cacheType string, cacheSize uint16) *RegexParser {
 	cfg := NewRegexParserConfig("test")
 	cfg.Regex = regex
+	if cacheType != "" {
+		cfg.CacheConfig.CacheType = cacheType
+		cfg.CacheConfig.CacheMaxSize = cacheSize
+	}
 	op, err := cfg.Build(testutil.Logger(t))
 	require.NoError(t, err)
 	return op.(*RegexParser)
@@ -47,24 +52,42 @@ func TestRegexParserBuildFailure(t *testing.T) {
 }
 
 func TestRegexParserByteFailure(t *testing.T) {
-	parser := newTestParser(t, "^(?P<key>test)")
+	parser := newTestParser(t, "^(?P<key>test)", "", 0)
 	_, err := parser.parse([]byte("invalid"))
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "type '[]uint8' cannot be parsed as regex")
 }
 
 func TestRegexParserStringFailure(t *testing.T) {
-	parser := newTestParser(t, "^(?P<key>test)")
+	parser := newTestParser(t, "^(?P<key>test)", "", 0)
 	_, err := parser.parse("invalid")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "regex pattern does not match")
 }
 
 func TestRegexParserInvalidType(t *testing.T) {
-	parser := newTestParser(t, "^(?P<key>test)")
+	parser := newTestParser(t, "^(?P<key>test)", "", 0)
 	_, err := parser.parse([]int{})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "type '[]int' cannot be parsed as regex")
+}
+
+func TestRegexParserCacheDefault(t *testing.T) {
+	parser := newTestParser(t, "^(?P<key>test)", "memory", 0)
+	_, err := parser.parse([]int{})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "type '[]int' cannot be parsed as regex")
+	require.NotNil(t, parser.Cache, "expected cache to be configured")
+	require.Equal(t, parser.Cache.MaxSize(), cache.DefaultMemoryMaxSize)
+}
+
+func TestRegexParserCache(t *testing.T) {
+	parser := newTestParser(t, "^(?P<key>test)", "memory", 200)
+	_, err := parser.parse([]int{})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "type '[]int' cannot be parsed as regex")
+	require.NotNil(t, parser.Cache, "expected cache to be configured")
+	require.Equal(t, parser.Cache.MaxSize(), uint16(200))
 }
 
 func TestParserRegex(t *testing.T) {
@@ -138,8 +161,16 @@ func TestParserRegex(t *testing.T) {
 			// as the entry's body
 			if regexOp.Cache != nil {
 				cacheKey := tc.inputBody.(string)
-				cacheOut, ok := regexOp.Get(cacheKey)
-				require.True(t, ok, "expected cache key to exist")
+
+				// Dump the cache to ensure the entry was actually written
+				dump := regexOp.Cache.Copy()
+				dumpOut, ok := dump[cacheKey]
+				require.True(t, ok, "expected %s to exist in the cache", cacheKey)
+				require.Equal(t, tc.outputBody, dumpOut)
+
+				// Call match directy to ensure we get the cached value back
+				cacheOut, err := regexOp.match(cacheKey)
+				require.NoError(t, err, "expected cache key to exist")
 				require.Equal(t, entry.Body, cacheOut)
 			}
 		})
