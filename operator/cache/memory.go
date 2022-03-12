@@ -18,7 +18,9 @@ import (
 	"sync"
 )
 
-// item is a cache entry that can take any data type
+// item is a cache entry. The incoming data type is
+// intended to be the input and output type passed
+// to parser operators, which happens to be interface{}
 type item interface{}
 
 // Default max size for Memory cache
