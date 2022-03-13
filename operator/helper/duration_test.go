@@ -31,6 +31,13 @@ type durationTestCase struct {
 	expectError bool
 }
 
+func TestNewDuration(t *testing.T) {
+	var input time.Duration = 100
+	output := NewDuration(input)
+	require.Equal(t, input, output.Duration)
+	require.Equal(t, input, output.Raw())
+}
+
 func TestParseDuration(t *testing.T) {
 	cases := []durationTestCase{
 		{
