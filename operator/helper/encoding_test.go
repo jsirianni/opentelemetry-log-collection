@@ -19,6 +19,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"golang.org/x/text/encoding"
+	"golang.org/x/text/encoding/charmap"
 	"golang.org/x/text/encoding/unicode"
 )
 
@@ -104,8 +105,18 @@ func TestBuild(t *testing.T) {
 		{
 			// ISO-8859-1 is a valid iana charset that is not explicitly mapped
 			// in this package
-			"custom",
+			"custom-ISO-8859-1",
 			EncodingConfig{"ISO-8859-1"},
+			Encoding{
+				Encoding: unicode.UTF8BOM,
+			},
+			"",
+		},
+		{
+			// ISO-8859-2 is a valid iana charset that is not explicitly mapped
+			// in this package
+			"custom-ISO-8859-2",
+			EncodingConfig{"ISO-8859-2"},
 			Encoding{
 				Encoding: unicode.UTF8BOM,
 			},
@@ -141,7 +152,16 @@ func TestBuild(t *testing.T) {
 				return
 			}
 
-			require.Equal(t, tc.expect, output)
+			// Test mapped encoding configs
+			for k := range encodingOverrides {
+				if k == tc.name || tc.name == "default" {
+					require.Equal(t, tc.expect, output)
+					return
+				}
+			}
+			// Test unmapped encoding configs, which are returned by
+			// ianana as a charmap.Charmap
+			require.IsType(t, &charmap.Charmap{}, output.Encoding)
 		})
 	}
 }

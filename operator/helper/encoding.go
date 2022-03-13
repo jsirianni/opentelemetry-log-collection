@@ -33,7 +33,7 @@ func NewEncodingConfig() EncodingConfig {
 
 // EncodingConfig is the configuration of a Encoding helper
 type EncodingConfig struct {
-	Encoding string `mapstructure:"encoding,omitempty"              json:"encoding,omitempty"             yaml:"encoding,omitempty"`
+	Encoding string `mapstructure:"encoding,omitempty" json:"encoding,omitempty" yaml:"encoding,omitempty"`
 }
 
 // Build will build an Encoding operator.
@@ -52,7 +52,8 @@ type Encoding struct {
 	Encoding encoding.Encoding
 }
 
-// decode converts the bytes in msgBuf to utf-8 from the configured encoding
+// Decode converts the bytes in msgBuf to a string with the
+// configured encoding.
 func (e *Encoding) Decode(msgBuf []byte) (string, error) {
 	decodeBuffer := make([]byte, 1<<12)
 	decoder := e.Encoding.NewDecoder()
