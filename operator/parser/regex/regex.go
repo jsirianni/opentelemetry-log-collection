@@ -43,6 +43,8 @@ type RegexParserConfig struct {
 	helper.ParserConfig `mapstructure:",squash" yaml:",inline"`
 
 	Regex string `mapstructure:"regex" json:"regex" yaml:"regex"`
+
+	CacheConfig `mapstructure:"cache" yaml:"cache"`
 }
 
 // Build will build a regex parser operator.
@@ -74,16 +76,29 @@ func (c RegexParserConfig) Build(logger *zap.SugaredLogger) (operator.Operator, 
 		)
 	}
 
-	return &RegexParser{
+	op := &RegexParser{
 		ParserOperator: parserOperator,
 		regexp:         r,
-	}, nil
+	}
+
+	switch c.CacheType {
+	case "":
+		op.cache = nil
+	case "memory":
+		op.cache = newMemoryCache(c.CacheMaxSize)
+		logger.Debugf("configured %s with memory cache of size %d", op.ID(), op.cache.MaxSize())
+	default:
+		return nil, fmt.Errorf("invalid cache type: %s", c.CacheType)
+	}
+
+	return op, nil
 }
 
 // RegexParser is an operator that parses regex in an entry.
 type RegexParser struct {
 	helper.ParserOperator
 	regexp *regexp.Regexp
+	cache  cache
 }
 
 // Process will parse an entry for regex.
@@ -104,8 +119,8 @@ func (r *RegexParser) parse(value interface{}) (interface{}, error) {
 }
 
 func (r *RegexParser) match(value string) (interface{}, error) {
-	if r.Cache != nil {
-		if cacheResult, ok := r.Cache.Get(value); ok {
+	if r.cache != nil {
+		if cacheResult, ok := r.cache.Get(value); ok {
 			return cacheResult, nil
 		}
 	}
@@ -126,9 +141,9 @@ func (r *RegexParser) match(value string) (interface{}, error) {
 		}
 	}
 
-	if r.Cache != nil {
+	if r.cache != nil {
 		// cache the output using the input string as the key
-		r.Cache.Add(value, parsedValues)
+		r.cache.Add(value, parsedValues)
 	}
 
 	return parsedValues, nil

@@ -26,7 +26,6 @@ import (
 
 	"github.com/open-telemetry/opentelemetry-log-collection/entry"
 	"github.com/open-telemetry/opentelemetry-log-collection/operator"
-	"github.com/open-telemetry/opentelemetry-log-collection/operator/cache"
 	"github.com/open-telemetry/opentelemetry-log-collection/operator/helper"
 	"github.com/open-telemetry/opentelemetry-log-collection/testutil"
 )
@@ -77,8 +76,8 @@ func TestRegexParserCacheDefault(t *testing.T) {
 	_, err := parser.parse([]int{})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "type '[]int' cannot be parsed as regex")
-	require.NotNil(t, parser.Cache, "expected cache to be configured")
-	require.Equal(t, parser.Cache.MaxSize(), cache.DefaultMemoryMaxSize)
+	require.NotNil(t, parser.cache, "expected cache to be configured")
+	require.Equal(t, parser.cache.MaxSize(), defaultMemoryCacheMaxSize)
 }
 
 func TestRegexParserCache(t *testing.T) {
@@ -86,8 +85,8 @@ func TestRegexParserCache(t *testing.T) {
 	_, err := parser.parse([]int{})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "type '[]int' cannot be parsed as regex")
-	require.NotNil(t, parser.Cache, "expected cache to be configured")
-	require.Equal(t, parser.Cache.MaxSize(), uint16(200))
+	require.NotNil(t, parser.cache, "expected cache to be configured")
+	require.Equal(t, parser.cache.MaxSize(), uint16(200))
 }
 
 func TestParserRegex(t *testing.T) {
@@ -159,11 +158,11 @@ func TestParserRegex(t *testing.T) {
 
 			// If cache is enabled, read it and ensure it is the same
 			// as the entry's body
-			if regexOp.Cache != nil {
+			if regexOp.cache != nil {
 				cacheKey := tc.inputBody.(string)
 
 				// Dump the cache to ensure the entry was actually written
-				dump := regexOp.Cache.Copy()
+				dump := regexOp.cache.Copy()
 				dumpOut, ok := dump[cacheKey]
 				require.True(t, ok, "expected %s to exist in the cache", cacheKey)
 				require.Equal(t, tc.outputBody, dumpOut)

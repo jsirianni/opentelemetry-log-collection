@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cache
+package regex
 
 import (
 	"strconv"
@@ -21,27 +21,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewMemory(t *testing.T) {
+func TestnewMemoryCache(t *testing.T) {
 	cases := []struct {
 		name       string
 		maxSize    uint16
-		expect     *Memory
+		expect     *memoryCache
 		expectSize int
 	}{
 		{
 			"default",
 			0,
-			&Memory{
-				cache: make(map[string]item),
-				keys:  make(chan string, DefaultMemoryMaxSize),
+			&memoryCache{
+				cache: make(map[string]interface{}),
+				keys:  make(chan string, defaultMemoryCacheMaxSize),
 			},
-			int(DefaultMemoryMaxSize),
+			int(defaultMemoryCacheMaxSize),
 		},
 		{
 			"size-50",
 			50,
-			&Memory{
-				cache: make(map[string]item),
+			&memoryCache{
+				cache: make(map[string]interface{}),
 				keys:  make(chan string, 50),
 			},
 			50,
@@ -49,7 +49,7 @@ func TestNewMemory(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		output := NewMemory(tc.maxSize)
+		output := newMemoryCache(tc.maxSize)
 		require.Equal(t, tc.expect.cache, output.cache)
 		require.Len(t, output.cache, 0, "new memory should always be empty")
 		require.Len(t, output.keys, 0, "new memory should always be empty")
@@ -60,24 +60,24 @@ func TestNewMemory(t *testing.T) {
 func TestMemory(t *testing.T) {
 	cases := []struct {
 		name   string
-		cache  *Memory
-		input  map[string]item
-		expect *Memory
+		cache  *memoryCache
+		input  map[string]interface{}
+		expect *memoryCache
 	}{
 		{
 			"basic",
-			func() *Memory {
-				return NewMemory(3)
+			func() *memoryCache {
+				return newMemoryCache(3)
 			}(),
-			map[string]item{
+			map[string]interface{}{
 				"key": "value",
 				"map-value": map[string]string{
 					"x":   "y",
 					"dev": "stanza",
 				},
 			},
-			&Memory{
-				cache: map[string]item{
+			&memoryCache{
+				cache: map[string]interface{}{
 					"key": "value",
 					"map-value": map[string]string{
 						"x":   "y",
@@ -112,7 +112,7 @@ func TestMemory(t *testing.T) {
 func TestCleanupLast(t *testing.T) {
 	maxSize := 10
 
-	m := NewMemory(uint16(maxSize))
+	m := newMemoryCache(uint16(maxSize))
 
 	// Add to cache until it is full
 	for i := 0; i <= cap(m.keys); i++ {
@@ -121,7 +121,7 @@ func TestCleanupLast(t *testing.T) {
 	}
 
 	// make sure the cache looks the way we expect
-	expectCache := map[string]item{
+	expectCache := map[string]interface{}{
 		"1":  1, // oldest key, will be removed when 11 is added
 		"2":  2,
 		"3":  3,
@@ -150,7 +150,7 @@ func TestCleanupLast(t *testing.T) {
 	}
 
 	// All entries should have been replaced by now
-	expectCache = map[string]item{
+	expectCache = map[string]interface{}{
 		"11": 11,
 		"12": 12,
 		"13": 13,
