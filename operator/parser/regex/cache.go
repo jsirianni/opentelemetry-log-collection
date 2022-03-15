@@ -16,6 +16,7 @@ package regex
 
 import "sync"
 
+// CacheConfig is a caching configuration
 type CacheConfig struct {
 	CacheType    string `json:"type" yaml:"type"`
 	CacheMaxSize uint16 `json:"size" yaml:"size"`
