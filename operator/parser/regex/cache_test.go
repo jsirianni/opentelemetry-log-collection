@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cache
+package regex
 
 import (
 	"strconv"
@@ -21,26 +21,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewMemory(t *testing.T) {
+func TestnewMemoryCache(t *testing.T) {
 	cases := []struct {
 		name       string
 		maxSize    uint16
-		expect     *Memory
+		expect     *memoryCache
 		expectSize int
 	}{
 		{
 			"default",
 			0,
-			&Memory{
+			&memoryCache{
 				cache: make(map[string]item),
-				keys:  make(chan string, DefaultMemoryMaxSize),
+				keys:  make(chan string, defaultMemoryCacheMaxSize),
 			},
-			int(DefaultMemoryMaxSize),
+			int(defaultMemoryCacheMaxSize),
 		},
 		{
 			"size-50",
 			50,
-			&Memory{
+			&memoryCache{
 				cache: make(map[string]item),
 				keys:  make(chan string, 50),
 			},
@@ -49,7 +49,7 @@ func TestNewMemory(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		output := NewMemory(tc.maxSize)
+		output := newMemoryCache(tc.maxSize)
 		require.Equal(t, tc.expect.cache, output.cache)
 		require.Len(t, output.cache, 0, "new memory should always be empty")
 		require.Len(t, output.keys, 0, "new memory should always be empty")
@@ -60,14 +60,14 @@ func TestNewMemory(t *testing.T) {
 func TestMemory(t *testing.T) {
 	cases := []struct {
 		name   string
-		cache  *Memory
+		cache  *memoryCache
 		input  map[string]item
-		expect *Memory
+		expect *memoryCache
 	}{
 		{
 			"basic",
-			func() *Memory {
-				return NewMemory(3)
+			func() *memoryCache {
+				return newMemoryCache(3)
 			}(),
 			map[string]item{
 				"key": "value",
@@ -76,7 +76,7 @@ func TestMemory(t *testing.T) {
 					"dev": "stanza",
 				},
 			},
-			&Memory{
+			&memoryCache{
 				cache: map[string]item{
 					"key": "value",
 					"map-value": map[string]string{
@@ -112,7 +112,7 @@ func TestMemory(t *testing.T) {
 func TestCleanupLast(t *testing.T) {
 	maxSize := 10
 
-	m := NewMemory(uint16(maxSize))
+	m := newMemoryCache(uint16(maxSize))
 
 	// Add to cache until it is full
 	for i := 0; i <= cap(m.keys); i++ {

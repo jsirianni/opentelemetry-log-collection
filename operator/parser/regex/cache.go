@@ -12,11 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cache
+package regex
 
-import (
-	"sync"
-)
+import "sync"
+
+type CacheConfig struct {
+	CacheType    string `json:"type" yaml:"type"`
+	CacheMaxSize uint16 `json:"size" yaml:"size"`
+}
+
+// cache allows operators to cache a value and look it up later
+type cache interface {
+	Get(key string) (interface{}, bool)
+	Add(key string, data interface{})
+	Copy() map[string]interface{}
+	MaxSize() uint16
+}
 
 // item is a cache entry. The incoming data type is
 // intended to be the input and output type passed
@@ -24,28 +35,28 @@ import (
 type item interface{}
 
 // Default max size for Memory cache
-const DefaultMemoryMaxSize uint16 = 100
+const defaultMemoryCacheMaxSize uint16 = 100
 
-// NewMemory returns a new Memory cache with a max size.
-// Uses DefaultMemoryMaxSize if maxSize is 0
-func NewMemory(maxSize uint16) *Memory {
+// newMemoryCache returns a new Memory cache with a max size.
+// Uses DefaultMemoryCacheMaxSize if maxSize is 0
+func newMemoryCache(maxSize uint16) *memoryCache {
 	if maxSize < 1 {
-		maxSize = DefaultMemoryMaxSize
+		maxSize = defaultMemoryCacheMaxSize
 	}
 
-	return &Memory{
+	return &memoryCache{
 		cache: make(map[string]item),
 		keys:  make(chan string, maxSize),
 	}
 }
 
-// Memory is an in memory cache of items with a pre defined
+// memoryCache is an in memory cache of items with a pre defined
 // max size. Memory's underlying storage is a map[string]item
 // and does not perform any manipulation of the data. Memory
 // is designed to be as fast as possible while being thread safe.
 // When the cache is full, new items will evict the oldest
 // item using a FIFO style queue.
-type Memory struct {
+type memoryCache struct {
 	// Key / Value pairs of cached items
 	cache map[string]item
 
@@ -59,11 +70,11 @@ type Memory struct {
 	mutex sync.RWMutex
 }
 
-var _ Cache = (&Memory{})
+var _ cache = (&memoryCache{})
 
 // Get returns an item from the cache and should be treated
 // the same as indexing a map
-func (m *Memory) Get(key string) (interface{}, bool) {
+func (m *memoryCache) Get(key string) (interface{}, bool) {
 	// Read and unlock as fast as possible
 	m.mutex.RLock()
 	data, ok := m.cache[key]
@@ -74,7 +85,7 @@ func (m *Memory) Get(key string) (interface{}, bool) {
 
 // Add inserts an item into the cache, if the cache is full, the
 // oldest item is removed
-func (m *Memory) Add(key string, data interface{}) {
+func (m *memoryCache) Add(key string, data interface{}) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
@@ -91,7 +102,7 @@ func (m *Memory) Add(key string, data interface{}) {
 }
 
 // Copy returns a deep copy of the cache
-func (m *Memory) Copy() map[string]interface{} {
+func (m *memoryCache) Copy() map[string]interface{} {
 	copy := make(map[string]interface{}, cap(m.keys))
 
 	m.mutex.Lock()
@@ -104,6 +115,6 @@ func (m *Memory) Copy() map[string]interface{} {
 }
 
 // MaxSize returns the max size of the cache
-func (m *Memory) MaxSize() uint16 {
+func (m *memoryCache) MaxSize() uint16 {
 	return uint16(cap(m.keys))
 }

@@ -26,7 +26,6 @@ import (
 
 	"github.com/open-telemetry/opentelemetry-log-collection/entry"
 	"github.com/open-telemetry/opentelemetry-log-collection/operator"
-	"github.com/open-telemetry/opentelemetry-log-collection/operator/cache"
 	"github.com/open-telemetry/opentelemetry-log-collection/operator/helper"
 	"github.com/open-telemetry/opentelemetry-log-collection/testutil"
 )
@@ -70,24 +69,6 @@ func TestRegexParserInvalidType(t *testing.T) {
 	_, err := parser.parse([]int{})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "type '[]int' cannot be parsed as regex")
-}
-
-func TestRegexParserCacheDefault(t *testing.T) {
-	parser := newTestParser(t, "^(?P<key>test)", "memory", 0)
-	_, err := parser.parse([]int{})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "type '[]int' cannot be parsed as regex")
-	require.NotNil(t, parser.Cache, "expected cache to be configured")
-	require.Equal(t, parser.Cache.MaxSize(), cache.DefaultMemoryMaxSize)
-}
-
-func TestRegexParserCache(t *testing.T) {
-	parser := newTestParser(t, "^(?P<key>test)", "memory", 200)
-	_, err := parser.parse([]int{})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "type '[]int' cannot be parsed as regex")
-	require.NotNil(t, parser.Cache, "expected cache to be configured")
-	require.Equal(t, parser.Cache.MaxSize(), uint16(200))
 }
 
 func TestParserRegex(t *testing.T) {
@@ -159,11 +140,11 @@ func TestParserRegex(t *testing.T) {
 
 			// If cache is enabled, read it and ensure it is the same
 			// as the entry's body
-			if regexOp.Cache != nil {
+			if regexOp.cache != nil {
 				cacheKey := tc.inputBody.(string)
 
 				// Dump the cache to ensure the entry was actually written
-				dump := regexOp.Cache.Copy()
+				dump := regexOp.cache.Copy()
 				dumpOut, ok := dump[cacheKey]
 				require.True(t, ok, "expected %s to exist in the cache", cacheKey)
 				require.Equal(t, tc.outputBody, dumpOut)
@@ -189,6 +170,21 @@ func TestBuildParserRegex(t *testing.T) {
 		c := newBasicRegexParser()
 		_, err := c.Build(testutil.Logger(t))
 		require.NoError(t, err)
+	})
+
+	t.Run("Cache", func(t *testing.T) {
+		c := newBasicRegexParser()
+		c.CacheConfig.CacheType = "memory"
+		_, err := c.Build(testutil.Logger(t))
+		require.NoError(t, err)
+	})
+
+	t.Run("CacheInvalidType", func(t *testing.T) {
+		c := newBasicRegexParser()
+		c.CacheConfig.CacheType = "disk"
+		_, err := c.Build(testutil.Logger(t))
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "invalid cache type")
 	})
 
 	t.Run("MissingRegexField", func(t *testing.T) {
