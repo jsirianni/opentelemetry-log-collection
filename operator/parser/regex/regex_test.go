@@ -365,6 +365,14 @@ func BenchmarkParseWithMemoryCacheFullBy90(b *testing.B) {
 	}
 }
 
+// Memory cache over capacity by 99
+func BenchmarkParseWithMemoryCacheFullBy99(b *testing.B) {
+	parser := newTestBenchParser(&testing.T{}, benchParsePattern, "memory", 1)
+	for n := 0; n < b.N; n++ {
+		benchmarkParseThreaded(b, parser, benchParsePatterns)
+	}
+}
+
 // No cache one file
 func BenchmarkParseNoCacheOneFile(b *testing.B) {
 	parser := newTestBenchParser(&testing.T{}, benchParsePattern, "", 0)
