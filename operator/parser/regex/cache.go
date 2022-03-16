@@ -51,7 +51,7 @@ func newMemoryCache(maxSize uint16) *memoryCache {
 	return &memoryCache{
 		cache:   make(map[string]interface{}),
 		keys:    make(chan string, maxSize),
-		limiter: newLimiter(limitCount, limitInterval),
+		limiter: newAtomicLimiter(limitCount, limitInterval),
 	}
 }
 
@@ -130,14 +130,19 @@ func (m *memoryCache) copy() map[string]interface{} {
 	return copy
 }
 
-// MaxSize returns the max size of the cache
+// maxSize returns the max size of the cache
 func (m *memoryCache) maxSize() uint16 {
 	return uint16(cap(m.keys))
 }
 
-// newLimiter and returns a new limiter
-func newLimiter(max uint64, interval time.Duration) limiter {
-	l := limiter{
+type limiter interface {
+	increment()
+	throttled() bool
+}
+
+// newAtomic and returns a new limiter
+func newAtomicLimiter(max uint64, interval time.Duration) *atomicLimiter {
+	l := atomicLimiter{
 		count:    0,
 		max:      max,
 		interval: interval,
@@ -152,14 +157,23 @@ func newLimiter(max uint64, interval time.Duration) limiter {
 		}
 	}()
 
-	return l
+	return &l
 }
 
-// limiter enables rate limiting when a counter
-type limiter struct {
+// atomicLimiter enables rate limiting using an atomic
+// counter
+type atomicLimiter struct {
 	count    uint64
 	max      uint64
 	interval time.Duration
+}
+
+var _ limiter = (&atomicLimiter{})
+
+// increment resets the limiter on an interval and starts
+// the cleanup go routine on the first run
+func (l *atomicLimiter) increment() {
+	atomic.AddUint64(&l.count, 1)
 }
 
 // Returns true if the cache is currently throttled, meaning a high
@@ -167,12 +181,6 @@ type limiter struct {
 // full. When the cache is contantly being locked for writes, reads
 // are blocked, causing the regex parser to be slower than if it was
 // not caching at all.
-func (l *limiter) throttled() bool {
+func (l *atomicLimiter) throttled() bool {
 	return l.count >= l.max
-}
-
-// increment resets the limiter on an interval and starts
-// the cleanup go routine on the first run
-func (l *limiter) increment() {
-	atomic.AddUint64(&l.count, 1)
 }
