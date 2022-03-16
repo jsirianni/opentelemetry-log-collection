@@ -167,16 +167,15 @@ func (l *atomicLimiter) start() {
 	}()
 }
 
-// increment resets the limiter on an interval and starts
-// the cleanup go routine on the first run
+// increment increments the attomic counter
 func (l *atomicLimiter) increment() {
 	atomic.AddUint64(&l.count, 1)
 }
 
 // Returns true if the cache is currently throttled, meaning a high
-// number of evictions have recently happened due to the cache being
-// full. When the cache is contantly being locked for writes, reads
-// are blocked, causing the regex parser to be slower than if it was
+// number of evictions have recently occurred due to the cache being
+// full. When the cache is contantly locked, reads and writes are
+// blocked, causing the regex parser to be slower than if it was
 // not caching at all.
 func (l *atomicLimiter) throttled() bool {
 	return l.count >= l.max
