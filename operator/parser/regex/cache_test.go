@@ -29,15 +29,6 @@ func TestnewMemoryCache(t *testing.T) {
 		expectSize int
 	}{
 		{
-			"default",
-			0,
-			&memoryCache{
-				cache: make(map[string]interface{}),
-				keys:  make(chan string, defaultMemoryCacheMaxSize),
-			},
-			int(defaultMemoryCacheMaxSize),
-		},
-		{
 			"size-50",
 			50,
 			&memoryCache{
@@ -92,16 +83,16 @@ func TestMemory(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			for key, value := range tc.input {
 				tc.cache.add(key, value)
-				out, ok := tc.cache.get(key)
-				require.True(t, ok, "expected to get value from cache immediately after adding it")
+				out := tc.cache.get(key)
+				require.NotNil(t, out, "expected to get value from cache immediately after adding it")
 				require.Equal(t, value, out, "expected value to equal the value that was added to the cache")
 			}
 
 			require.Equal(t, len(tc.expect.cache), len(tc.cache.cache))
 
 			for expectKey, expectItem := range tc.expect.cache {
-				actual, ok := tc.cache.get(expectKey)
-				require.True(t, ok)
+				actual := tc.cache.get(expectKey)
+				require.NotNil(t, actual)
 				require.Equal(t, expectItem, actual)
 			}
 		})
@@ -144,8 +135,8 @@ func TestCleanupLast(t *testing.T) {
 		m.add(str, i)
 
 		removedKey := strconv.Itoa(i - 10)
-		_, ok := m.get(removedKey)
-		require.False(t, ok, "expected key %s to have been removed", removedKey)
+		x := m.get(removedKey)
+		require.Nil(t, x, "expected key %s to have been removed", removedKey)
 		require.Len(t, m.cache, maxSize)
 	}
 

@@ -22,27 +22,21 @@ import (
 
 // CacheConfig is a configuration for caching
 type CacheConfig struct {
-	CacheType    string `json:"type" yaml:"type"`
+	// CacheMaxSize is the maximum number of entries a cache
+	// should retain before evicting old entries
 	CacheMaxSize uint16 `json:"size" yaml:"size"`
 }
 
 // cache allows operators to cache a value and look it up later
 type cache interface {
-	get(key string) (interface{}, bool)
+	get(key string) interface{}
 	add(key string, data interface{})
 	copy() map[string]interface{}
 	maxSize() uint16
 }
 
-// Default max size for Memory cache
-const defaultMemoryCacheMaxSize uint16 = 100
-
 // newMemoryCache returns a new memory backed cache
 func newMemoryCache(maxSize uint16) *memoryCache {
-	if maxSize < 1 {
-		maxSize = defaultMemoryCacheMaxSize
-	}
-
 	// rate limiter will throttle when cache is above
 	// 100% turnover within the limit inteval
 	limitCount := uint64(maxSize) + 1
@@ -85,15 +79,14 @@ type memoryCache struct {
 
 var _ cache = (&memoryCache{})
 
-// get returns an item from the cache and should be treated
-// the same as indexing a map
-func (m *memoryCache) get(key string) (interface{}, bool) {
+// get returns a cached entry, nil if it does not exist
+func (m *memoryCache) get(key string) interface{} {
 	// Read and unlock as fast as possible
 	m.mutex.RLock()
-	data, ok := m.cache[key]
+	data := m.cache[key]
 	m.mutex.RUnlock()
 
-	return data, ok
+	return data
 }
 
 // add inserts an item into the cache, if the cache is full, the

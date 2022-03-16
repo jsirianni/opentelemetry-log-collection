@@ -81,14 +81,9 @@ func (c RegexParserConfig) Build(logger *zap.SugaredLogger) (operator.Operator, 
 		regexp:         r,
 	}
 
-	switch c.CacheType {
-	case "":
-		op.cache = nil
-	case "memory":
+	if c.CacheMaxSize > 0 {
 		op.cache = newMemoryCache(c.CacheMaxSize)
 		logger.Debugf("configured %s with memory cache of size %d", op.ID(), op.cache.maxSize())
-	default:
-		return nil, fmt.Errorf("invalid cache type: %s", c.CacheType)
 	}
 
 	return op, nil
@@ -120,8 +115,8 @@ func (r *RegexParser) parse(value interface{}) (interface{}, error) {
 
 func (r *RegexParser) match(value string) (interface{}, error) {
 	if r.cache != nil {
-		if cacheResult, ok := r.cache.get(value); ok {
-			return cacheResult, nil
+		if x := r.cache.get(value); x != nil {
+			return x, nil
 		}
 	}
 
@@ -142,7 +137,6 @@ func (r *RegexParser) match(value string) (interface{}, error) {
 	}
 
 	if r.cache != nil {
-		// cache the output using the input string as the key
 		r.cache.add(value, parsedValues)
 	}
 

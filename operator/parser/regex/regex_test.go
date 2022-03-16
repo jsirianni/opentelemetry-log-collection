@@ -30,11 +30,10 @@ import (
 	"github.com/open-telemetry/opentelemetry-log-collection/testutil"
 )
 
-func newTestParser(t *testing.T, regex string, cacheType string, cacheSize uint16) *RegexParser {
+func newTestParser(t *testing.T, regex string, cacheSize uint16) *RegexParser {
 	cfg := NewRegexParserConfig("test")
 	cfg.Regex = regex
-	if cacheType != "" {
-		cfg.CacheConfig.CacheType = cacheType
+	if cacheSize > 0 {
 		cfg.CacheConfig.CacheMaxSize = cacheSize
 	}
 	op, err := cfg.Build(testutil.Logger(t))
@@ -51,37 +50,28 @@ func TestRegexParserBuildFailure(t *testing.T) {
 }
 
 func TestRegexParserByteFailure(t *testing.T) {
-	parser := newTestParser(t, "^(?P<key>test)", "", 0)
+	parser := newTestParser(t, "^(?P<key>test)", 0)
 	_, err := parser.parse([]byte("invalid"))
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "type '[]uint8' cannot be parsed as regex")
 }
 
 func TestRegexParserStringFailure(t *testing.T) {
-	parser := newTestParser(t, "^(?P<key>test)", "", 0)
+	parser := newTestParser(t, "^(?P<key>test)", 0)
 	_, err := parser.parse("invalid")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "regex pattern does not match")
 }
 
 func TestRegexParserInvalidType(t *testing.T) {
-	parser := newTestParser(t, "^(?P<key>test)", "", 0)
+	parser := newTestParser(t, "^(?P<key>test)", 0)
 	_, err := parser.parse([]int{})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "type '[]int' cannot be parsed as regex")
-}
-
-func TestRegexParserCacheDefault(t *testing.T) {
-	parser := newTestParser(t, "^(?P<key>test)", "memory", 0)
-	_, err := parser.parse([]int{})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "type '[]int' cannot be parsed as regex")
-	require.NotNil(t, parser.cache, "expected cache to be configured")
-	require.Equal(t, parser.cache.maxSize(), defaultMemoryCacheMaxSize)
 }
 
 func TestRegexParserCache(t *testing.T) {
-	parser := newTestParser(t, "^(?P<key>test)", "memory", 200)
+	parser := newTestParser(t, "^(?P<key>test)", 200)
 	_, err := parser.parse([]int{})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "type '[]int' cannot be parsed as regex")
@@ -111,7 +101,7 @@ func TestParserRegex(t *testing.T) {
 			func(p *RegexParserConfig) {
 				p.Regex = "a=(?P<a>.*)"
 				p.ParseTo = entry.NewBodyField()
-				p.CacheType = "memory"
+				p.CacheMaxSize = 100
 			},
 			"a=b",
 			map[string]interface{}{
@@ -122,7 +112,7 @@ func TestParserRegex(t *testing.T) {
 			"K8sFileCache",
 			func(p *RegexParserConfig) {
 				p.Regex = `^(?P<pod_name>[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*)_(?P<namespace>[^_]+)_(?P<container_name>.+)-(?P<container_id>[a-z0-9]{64})\.log$`
-				p.CacheType = "memory"
+				p.CacheMaxSize = 100
 			},
 			"coredns-5644d7b6d9-mzngq_kube-system_coredns-901f7510281180a402936c92f5bc0f3557f5a21ccb5a4591c5bf98f3ddbffdd6.log",
 			map[string]interface{}{
@@ -284,7 +274,6 @@ var benchParsePatterns = benchParseInput()
 func newTestBenchParser(t *testing.T, regex string, cacheType string, cacheSize uint16) *RegexParser {
 	cfg := NewRegexParserConfig("bench")
 	cfg.Regex = regex
-	cfg.CacheConfig.CacheType = cacheType
 	cfg.CacheConfig.CacheMaxSize = cacheSize
 
 	op, err := cfg.Build(testutil.Logger(t))
