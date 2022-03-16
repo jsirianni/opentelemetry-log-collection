@@ -37,8 +37,7 @@ type cache interface {
 // Default max size for Memory cache
 const defaultMemoryCacheMaxSize uint16 = 100
 
-// newMemoryCache returns a new Memory cache with a max size.
-// Uses defaultMemoryCacheMaxSize if maxSize is 0
+// newMemoryCache returns a new memory backed cache
 func newMemoryCache(maxSize uint16) *memoryCache {
 	if maxSize < 1 {
 		maxSize = defaultMemoryCacheMaxSize
@@ -47,6 +46,10 @@ func newMemoryCache(maxSize uint16) *memoryCache {
 	return &memoryCache{
 		cache: make(map[string]interface{}),
 		keys:  make(chan string, maxSize),
+
+		// skip the cache when 11 or more evictions
+		// have occurred in the past five seconds
+		limiter: newLimiter(11, time.Second*5),
 	}
 }
 
@@ -127,9 +130,31 @@ func (m *memoryCache) MaxSize() uint16 {
 	return uint16(cap(m.keys))
 }
 
+// newLimiter and returns a new limiter
+func newLimiter(max uint64, interval time.Duration) limiter {
+	l := limiter{
+		count:    0,
+		max:      max,
+		interval: interval,
+	}
+
+	// resets the limiter with the configured
+	// interval
+	go func() {
+		ticker := time.NewTicker(l.interval)
+		for _ = range ticker.C {
+			atomic.SwapUint64(&l.count, 0)
+		}
+	}()
+
+	return l
+}
+
+// limiter enables rate limiting when a counter
 type limiter struct {
-	count uint64
-	init  sync.Once
+	count    uint64
+	max      uint64
+	interval time.Duration
 }
 
 // Returns true if the cache is currently throttled, meaning a high
@@ -138,21 +163,11 @@ type limiter struct {
 // are blocked, causing the regex parser to be slower than if it was
 // not caching at all.
 func (l *limiter) throttled() bool {
-	return l.count > 10
+	return l.count >= l.max
 }
 
-// increment resets the rate limiter on an interval
+// increment resets the limiter on an interval and starts
+// the cleanup go routine on the first run
 func (l *limiter) increment() {
-	// On first run, start the cleanup goroutine which will
-	// reset the eviction counter every five seconds
-	l.init.Do(func() {
-		go func() {
-			for {
-				time.Sleep(time.Second * 5)
-				atomic.SwapUint64(&l.count, 0)
-			}
-		}()
-	})
-
 	atomic.AddUint64(&l.count, 1)
 }
