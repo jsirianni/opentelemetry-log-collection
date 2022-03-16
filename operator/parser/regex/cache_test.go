@@ -91,8 +91,8 @@ func TestMemory(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			for key, value := range tc.input {
-				tc.cache.Add(key, value)
-				out, ok := tc.cache.Get(key)
+				tc.cache.add(key, value)
+				out, ok := tc.cache.get(key)
 				require.True(t, ok, "expected to get value from cache immediately after adding it")
 				require.Equal(t, value, out, "expected value to equal the value that was added to the cache")
 			}
@@ -100,7 +100,7 @@ func TestMemory(t *testing.T) {
 			require.Equal(t, len(tc.expect.cache), len(tc.cache.cache))
 
 			for expectKey, expectItem := range tc.expect.cache {
-				actual, ok := tc.cache.Get(expectKey)
+				actual, ok := tc.cache.get(expectKey)
 				require.True(t, ok)
 				require.Equal(t, expectItem, actual)
 			}
@@ -117,7 +117,7 @@ func TestCleanupLast(t *testing.T) {
 	// Add to cache until it is full
 	for i := 0; i <= cap(m.keys); i++ {
 		str := strconv.Itoa(i)
-		m.Add(str, i)
+		m.add(str, i)
 	}
 
 	// make sure the cache looks the way we expect
@@ -141,10 +141,10 @@ func TestCleanupLast(t *testing.T) {
 	// 1, 2, 3 and so on.
 	for i := 11; i <= 20; i++ {
 		str := strconv.Itoa(i)
-		m.Add(str, i)
+		m.add(str, i)
 
 		removedKey := strconv.Itoa(i - 10)
-		_, ok := m.Get(removedKey)
+		_, ok := m.get(removedKey)
 		require.False(t, ok, "expected key %s to have been removed", removedKey)
 		require.Len(t, m.cache, maxSize)
 	}

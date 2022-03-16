@@ -28,10 +28,10 @@ type CacheConfig struct {
 
 // cache allows operators to cache a value and look it up later
 type cache interface {
-	Get(key string) (interface{}, bool)
-	Add(key string, data interface{})
-	Copy() map[string]interface{}
-	MaxSize() uint16
+	get(key string) (interface{}, bool)
+	add(key string, data interface{})
+	copy() map[string]interface{}
+	maxSize() uint16
 }
 
 // Default max size for Memory cache
@@ -43,13 +43,15 @@ func newMemoryCache(maxSize uint16) *memoryCache {
 		maxSize = defaultMemoryCacheMaxSize
 	}
 
-	return &memoryCache{
-		cache: make(map[string]interface{}),
-		keys:  make(chan string, maxSize),
+	// rate limiter will throttle when cache is above
+	// 100% turnover within the limit inteval
+	limitCount := uint64(maxSize) + 1
+	limitInterval := time.Second * 5
 
-		// skip the cache when 11 or more evictions
-		// have occurred in the past five seconds
-		limiter: newLimiter(11, time.Second*5),
+	return &memoryCache{
+		cache:   make(map[string]interface{}),
+		keys:    make(chan string, maxSize),
+		limiter: newLimiter(limitCount, limitInterval),
 	}
 }
 
@@ -78,9 +80,9 @@ type memoryCache struct {
 
 var _ cache = (&memoryCache{})
 
-// Get returns an item from the cache and should be treated
+// get returns an item from the cache and should be treated
 // the same as indexing a map
-func (m *memoryCache) Get(key string) (interface{}, bool) {
+func (m *memoryCache) get(key string) (interface{}, bool) {
 	// Read and unlock as fast as possible
 	m.mutex.RLock()
 	data, ok := m.cache[key]
@@ -89,9 +91,9 @@ func (m *memoryCache) Get(key string) (interface{}, bool) {
 	return data, ok
 }
 
-// Add inserts an item into the cache, if the cache is full, the
+// add inserts an item into the cache, if the cache is full, the
 // oldest item is removed
-func (m *memoryCache) Add(key string, data interface{}) {
+func (m *memoryCache) add(key string, data interface{}) {
 	if m.limiter.throttled() {
 		return
 	}
@@ -103,17 +105,20 @@ func (m *memoryCache) Add(key string, data interface{}) {
 		// Pop the oldest key from the channel
 		// and remove it from the cache
 		delete(m.cache, <-m.keys)
+
+		// notify the rate limiter that an entry
+		// was evicted
 		m.limiter.increment()
 	}
 
-	// Write the cached entry and push it's
-	// key to the channel
+	// Write the cached entry and add the key
+	// to the channel
 	m.cache[key] = data
 	m.keys <- key
 }
 
-// Copy returns a deep copy of the cache
-func (m *memoryCache) Copy() map[string]interface{} {
+// copy returns a deep copy of the cache
+func (m *memoryCache) copy() map[string]interface{} {
 	copy := make(map[string]interface{}, cap(m.keys))
 
 	m.mutex.Lock()
@@ -126,7 +131,7 @@ func (m *memoryCache) Copy() map[string]interface{} {
 }
 
 // MaxSize returns the max size of the cache
-func (m *memoryCache) MaxSize() uint16 {
+func (m *memoryCache) maxSize() uint16 {
 	return uint16(cap(m.keys))
 }
 
