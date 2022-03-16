@@ -14,7 +14,11 @@
 
 package regex
 
-import "sync"
+import (
+	"sync"
+	"sync/atomic"
+	"time"
+)
 
 // CacheConfig is a configuration for caching
 type CacheConfig struct {
@@ -64,6 +68,9 @@ type memoryCache struct {
 	// All read options will trigger a read lock while all
 	// write options will trigger a lock
 	mutex sync.RWMutex
+
+	// Limiter rate limits the cache
+	limiter limiter
 }
 
 var _ cache = (&memoryCache{})
@@ -82,6 +89,10 @@ func (m *memoryCache) Get(key string) (interface{}, bool) {
 // Add inserts an item into the cache, if the cache is full, the
 // oldest item is removed
 func (m *memoryCache) Add(key string, data interface{}) {
+	if m.limiter.throttled() {
+		return
+	}
+
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
@@ -89,6 +100,7 @@ func (m *memoryCache) Add(key string, data interface{}) {
 		// Pop the oldest key from the channel
 		// and remove it from the cache
 		delete(m.cache, <-m.keys)
+		m.limiter.increment()
 	}
 
 	// Write the cached entry and push it's
@@ -113,4 +125,34 @@ func (m *memoryCache) Copy() map[string]interface{} {
 // MaxSize returns the max size of the cache
 func (m *memoryCache) MaxSize() uint16 {
 	return uint16(cap(m.keys))
+}
+
+type limiter struct {
+	count uint64
+	init  sync.Once
+}
+
+// Returns true if the cache is currently throttled, meaning a high
+// number of evictions have recently happened due to the cache being
+// full. When the cache is contantly being locked for writes, reads
+// are blocked, causing the regex parser to be slower than if it was
+// not caching at all.
+func (l *limiter) throttled() bool {
+	return l.count > 10
+}
+
+// increment resets the rate limiter on an interval
+func (l *limiter) increment() {
+	// On first run, start the cleanup goroutine which will
+	// reset the eviction counter every five seconds
+	l.init.Do(func() {
+		go func() {
+			for {
+				time.Sleep(time.Second * 5)
+				atomic.SwapUint64(&l.count, 0)
+			}
+		}()
+	})
+
+	atomic.AddUint64(&l.count, 1)
 }
