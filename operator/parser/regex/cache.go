@@ -41,7 +41,7 @@ func newMemoryCache(maxSize uint16) *memoryCache {
 	// 100% turnover within the limit inteval
 	limitCount := uint64(maxSize) + 1
 	limitInterval := time.Second * 5
-	limiter := newAtomicLimiter(limitCount, limitInterval)
+	limiter := newStartedAtomicLimiter(limitCount, limitInterval)
 
 	return &memoryCache{
 		cache:   make(map[string]interface{}),
@@ -100,9 +100,6 @@ func (m *memoryCache) add(key string, data interface{}) {
 		// and remove it from the cache
 		delete(m.cache, <-m.keys)
 
-		// ensure the limiter is started
-		m.limiter.init()
-
 		// notify the rate limiter that an entry
 		// was evicted
 		m.limiter.increment()
@@ -140,16 +137,21 @@ type limiter interface {
 	throttled() bool
 }
 
-func newAtomicLimiter(max uint64, interval time.Duration) *atomicLimiter {
-	return &atomicLimiter{
+// newStartedAtomicLimiter returns a started atomicLimiter
+func newStartedAtomicLimiter(max uint64, interval time.Duration) *atomicLimiter {
+	a := &atomicLimiter{
 		count:    0,
 		max:      max,
 		interval: interval,
 	}
+
+	a.init()
+	return a
 }
 
 // atomicLimiter enables rate limiting using an atomic
-// counter
+// counter. When count is >= max, throttled will return
+// true. The count is reset on an interval.
 type atomicLimiter struct {
 	count    uint64
 	max      uint64
