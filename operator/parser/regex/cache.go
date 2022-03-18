@@ -43,15 +43,11 @@ func newMemoryCache(maxSize uint16) *memoryCache {
 	limitInterval := time.Second * 5
 	limiter := newAtomicLimiter(limitCount, limitInterval)
 
-	m := &memoryCache{
+	return &memoryCache{
 		cache:   make(map[string]interface{}),
 		keys:    make(chan string, maxSize),
 		limiter: limiter,
 	}
-
-	// start the rate limiter and return the cache
-	m.limiter.start()
-	return m
 }
 
 // memoryCache is an in memory cache of items with a pre defined
@@ -104,6 +100,9 @@ func (m *memoryCache) add(key string, data interface{}) {
 		// and remove it from the cache
 		delete(m.cache, <-m.keys)
 
+		// ensure the limiter is started
+		m.limiter.init()
+
 		// notify the rate limiter that an entry
 		// was evicted
 		m.limiter.increment()
@@ -133,8 +132,10 @@ func (m *memoryCache) maxSize() uint16 {
 	return uint16(cap(m.keys))
 }
 
+// limiter provides rate limiting methods for
+// the cache
 type limiter interface {
-	start()
+	init()
 	increment()
 	throttled() bool
 }
@@ -153,18 +154,22 @@ type atomicLimiter struct {
 	count    uint64
 	max      uint64
 	interval time.Duration
+	start    sync.Once
 }
 
 var _ limiter = (&atomicLimiter{})
 
-// start runs the reset go routine
-func (l *atomicLimiter) start() {
-	go func() {
-		ticker := time.NewTicker(l.interval)
-		for _ = range ticker.C {
-			atomic.SwapUint64(&l.count, 0)
-		}
-	}()
+// init initializes the limiter runs the reset go routine
+func (l *atomicLimiter) init() {
+	// start the reset go routine once
+	l.start.Do(func() {
+		go func() {
+			ticker := time.NewTicker(l.interval)
+			for _ = range ticker.C {
+				atomic.SwapUint64(&l.count, 0)
+			}
+		}()
+	})
 }
 
 // increment increments the attomic counter
