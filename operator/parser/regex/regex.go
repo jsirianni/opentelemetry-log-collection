@@ -44,7 +44,9 @@ type RegexParserConfig struct {
 
 	Regex string `mapstructure:"regex" json:"regex" yaml:"regex"`
 
-	CacheConfig `mapstructure:"cache" yaml:"cache"`
+	Cache struct {
+		Size uint16 `json:"size" yaml:"size"`
+	} `mapstructure:"cache" json:"cache" yaml:"cache"`
 }
 
 // Build will build a regex parser operator.
@@ -81,8 +83,8 @@ func (c RegexParserConfig) Build(logger *zap.SugaredLogger) (operator.Operator, 
 		regexp:         r,
 	}
 
-	if c.CacheMaxSize > 0 {
-		op.cache = newMemoryCache(c.CacheMaxSize)
+	if c.Cache.Size > 0 {
+		op.cache = newMemoryCache(c.Cache.Size, 0)
 		logger.Debugf("configured %s with memory cache of size %d", op.ID(), op.cache.maxSize())
 	}
 

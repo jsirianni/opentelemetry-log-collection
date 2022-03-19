@@ -34,7 +34,7 @@ func newTestParser(t *testing.T, regex string, cacheSize uint16) *RegexParser {
 	cfg := NewRegexParserConfig("test")
 	cfg.Regex = regex
 	if cacheSize > 0 {
-		cfg.CacheConfig.CacheMaxSize = cacheSize
+		cfg.Cache.Size = cacheSize
 	}
 	op, err := cfg.Build(testutil.Logger(t))
 	require.NoError(t, err)
@@ -71,7 +71,7 @@ func TestRegexParserInvalidType(t *testing.T) {
 }
 
 func TestRegexParserCache(t *testing.T) {
-	parser := newTestParser(t, "^(?P<key>test)", 200)
+	parser := newTestParser(t, "^(?P<key>cache)", 200)
 	_, err := parser.parse([]int{})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "type '[]int' cannot be parsed as regex")
@@ -101,7 +101,7 @@ func TestParserRegex(t *testing.T) {
 			func(p *RegexParserConfig) {
 				p.Regex = "a=(?P<a>.*)"
 				p.ParseTo = entry.NewBodyField()
-				p.CacheMaxSize = 100
+				p.Cache.Size = 100
 			},
 			"a=b",
 			map[string]interface{}{
@@ -112,7 +112,7 @@ func TestParserRegex(t *testing.T) {
 			"K8sFileCache",
 			func(p *RegexParserConfig) {
 				p.Regex = `^(?P<pod_name>[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*)_(?P<namespace>[^_]+)_(?P<container_name>.+)-(?P<container_id>[a-z0-9]{64})\.log$`
-				p.CacheMaxSize = 100
+				p.Cache.Size = 100
 			},
 			"coredns-5644d7b6d9-mzngq_kube-system_coredns-901f7510281180a402936c92f5bc0f3557f5a21ccb5a4591c5bf98f3ddbffdd6.log",
 			map[string]interface{}{
@@ -157,7 +157,7 @@ func TestParserRegex(t *testing.T) {
 				require.True(t, ok, "expected %s to exist in the cache", cacheKey)
 				require.Equal(t, tc.outputBody, dumpOut)
 
-				// Call match directy to ensure we get the cached value back
+				// Call match directly to ensure we get the cached value back
 				cacheOut, err := regexOp.match(cacheKey)
 				require.NoError(t, err, "expected cache key to exist")
 				require.Equal(t, entry.Body, cacheOut)
@@ -271,10 +271,10 @@ const benchParsePattern = `^(?P<pod_name>[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9
 
 var benchParsePatterns = benchParseInput()
 
-func newTestBenchParser(t *testing.T, regex string, cacheType string, cacheSize uint16) *RegexParser {
+func newTestBenchParser(t *testing.T, cacheSize uint16) *RegexParser {
 	cfg := NewRegexParserConfig("bench")
-	cfg.Regex = regex
-	cfg.CacheConfig.CacheMaxSize = cacheSize
+	cfg.Regex = benchParsePattern
+	cfg.Cache.Size = cacheSize
 
 	op, err := cfg.Build(testutil.Logger(t))
 	require.NoError(t, err)
@@ -308,7 +308,7 @@ func benchmarkParse(b *testing.B, parser *RegexParser, input []string) {
 
 // No cache
 func BenchmarkParseNoCache(b *testing.B) {
-	parser := newTestBenchParser(&testing.T{}, benchParsePattern, "", 0)
+	parser := newTestBenchParser(&testing.T{}, 0)
 	for n := 0; n < b.N; n++ {
 		benchmarkParseThreaded(b, parser, benchParsePatterns)
 	}
@@ -316,7 +316,7 @@ func BenchmarkParseNoCache(b *testing.B) {
 
 // Memory cache at capacity
 func BenchmarkParseWithMemoryCache(b *testing.B) {
-	parser := newTestBenchParser(&testing.T{}, benchParsePattern, "memory", 100)
+	parser := newTestBenchParser(&testing.T{}, 100)
 	for n := 0; n < b.N; n++ {
 		benchmarkParseThreaded(b, parser, benchParsePatterns)
 	}
@@ -324,7 +324,7 @@ func BenchmarkParseWithMemoryCache(b *testing.B) {
 
 // Memory cache over capacity by one
 func BenchmarkParseWithMemoryCacheFullByOne(b *testing.B) {
-	parser := newTestBenchParser(&testing.T{}, benchParsePattern, "memory", 99)
+	parser := newTestBenchParser(&testing.T{}, 99)
 	for n := 0; n < b.N; n++ {
 		benchmarkParseThreaded(b, parser, benchParsePatterns)
 	}
@@ -332,7 +332,7 @@ func BenchmarkParseWithMemoryCacheFullByOne(b *testing.B) {
 
 // Memory cache over capacity by 10
 func BenchmarkParseWithMemoryCacheFullBy10(b *testing.B) {
-	parser := newTestBenchParser(&testing.T{}, benchParsePattern, "memory", 90)
+	parser := newTestBenchParser(&testing.T{}, 90)
 	for n := 0; n < b.N; n++ {
 		benchmarkParseThreaded(b, parser, benchParsePatterns)
 	}
@@ -340,7 +340,7 @@ func BenchmarkParseWithMemoryCacheFullBy10(b *testing.B) {
 
 // Memory cache over capacity by 50
 func BenchmarkParseWithMemoryCacheFullBy50(b *testing.B) {
-	parser := newTestBenchParser(&testing.T{}, benchParsePattern, "memory", 50)
+	parser := newTestBenchParser(&testing.T{}, 50)
 	for n := 0; n < b.N; n++ {
 		benchmarkParseThreaded(b, parser, benchParsePatterns)
 	}
@@ -348,7 +348,7 @@ func BenchmarkParseWithMemoryCacheFullBy50(b *testing.B) {
 
 // Memory cache over capacity by 90
 func BenchmarkParseWithMemoryCacheFullBy90(b *testing.B) {
-	parser := newTestBenchParser(&testing.T{}, benchParsePattern, "memory", 10)
+	parser := newTestBenchParser(&testing.T{}, 10)
 	for n := 0; n < b.N; n++ {
 		benchmarkParseThreaded(b, parser, benchParsePatterns)
 	}
@@ -356,7 +356,7 @@ func BenchmarkParseWithMemoryCacheFullBy90(b *testing.B) {
 
 // Memory cache over capacity by 99
 func BenchmarkParseWithMemoryCacheFullBy99(b *testing.B) {
-	parser := newTestBenchParser(&testing.T{}, benchParsePattern, "memory", 1)
+	parser := newTestBenchParser(&testing.T{}, 1)
 	for n := 0; n < b.N; n++ {
 		benchmarkParseThreaded(b, parser, benchParsePatterns)
 	}
@@ -364,7 +364,7 @@ func BenchmarkParseWithMemoryCacheFullBy99(b *testing.B) {
 
 // No cache one file
 func BenchmarkParseNoCacheOneFile(b *testing.B) {
-	parser := newTestBenchParser(&testing.T{}, benchParsePattern, "", 0)
+	parser := newTestBenchParser(&testing.T{}, 0)
 	for n := 0; n < b.N; n++ {
 		pattern := []string{benchParsePatterns[0]}
 		benchmarkParse(b, parser, pattern)
@@ -373,7 +373,7 @@ func BenchmarkParseNoCacheOneFile(b *testing.B) {
 
 // Memory cache one file
 func BenchmarkParseWithMemoryCacheOneFile(b *testing.B) {
-	parser := newTestBenchParser(&testing.T{}, benchParsePattern, "memory", 100)
+	parser := newTestBenchParser(&testing.T{}, 100)
 	for n := 0; n < b.N; n++ {
 		pattern := []string{benchParsePatterns[0]}
 		benchmarkParse(b, parser, pattern)

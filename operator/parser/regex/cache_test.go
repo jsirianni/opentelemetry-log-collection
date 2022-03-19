@@ -17,11 +17,12 @@ package regex
 import (
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
 
-func TestnewMemoryCache(t *testing.T) {
+func TestNewMemoryCache(t *testing.T) {
 	cases := []struct {
 		name       string
 		maxSize    uint16
@@ -40,7 +41,7 @@ func TestnewMemoryCache(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		output := newMemoryCache(tc.maxSize)
+		output := newMemoryCache(tc.maxSize, 0)
 		require.Equal(t, tc.expect.cache, output.cache)
 		require.Len(t, output.cache, 0, "new memory should always be empty")
 		require.Len(t, output.keys, 0, "new memory should always be empty")
@@ -58,7 +59,7 @@ func TestMemory(t *testing.T) {
 		{
 			"basic",
 			func() *memoryCache {
-				return newMemoryCache(3)
+				return newMemoryCache(3, 0)
 			}(),
 			map[string]interface{}{
 				"key": "value",
@@ -103,7 +104,7 @@ func TestMemory(t *testing.T) {
 func TestCleanupLast(t *testing.T) {
 	maxSize := 10
 
-	m := newMemoryCache(uint16(maxSize))
+	m := newMemoryCache(uint16(maxSize), 0)
 
 	// Add to cache until it is full
 	for i := 0; i <= cap(m.keys); i++ {
@@ -155,4 +156,117 @@ func TestCleanupLast(t *testing.T) {
 	}
 	require.Equal(t, expectCache, m.cache)
 	require.Len(t, m.cache, maxSize)
+}
+
+func TestNewStartedAtomicLimiter(t *testing.T) {
+	cases := []struct {
+		name     string
+		max      uint64
+		interval uint64
+	}{
+		{
+			"default",
+			0,
+			0,
+		},
+		{
+			"max",
+			30,
+			0,
+		},
+		{
+			"interval",
+			0,
+			3,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			l := newStartedAtomicLimiter(tc.max, tc.interval)
+			require.Equal(t, tc.max, l.max)
+			if tc.interval == 0 {
+				// default
+				tc.interval = 30
+			}
+			require.Equal(t, float64(tc.interval), l.interval.Seconds())
+			require.Equal(t, uint64(0), l.count)
+		})
+	}
+}
+
+// Start a limiter with a max of 3 and ensure throttling begins
+func TestLimiter(t *testing.T) {
+	max := uint64(3)
+
+	l := newStartedAtomicLimiter(max, 120)
+	require.NotNil(t, l)
+	require.Equal(t, max, l.max)
+
+	require.False(t, l.throttled(), "new limiter should not be throttling")
+	require.Equal(t, uint64(0), l.count)
+
+	var i uint64
+	for i = 1; i < max; i++ {
+		l.increment()
+		require.Equal(t, i, l.count)
+		require.False(t, l.throttled())
+	}
+
+	l.increment()
+	require.True(t, l.throttled())
+}
+
+func TestThrottledLimiter(t *testing.T) {
+	max := uint64(3)
+
+	// Limiter with a count higher than the max, which will force
+	// it to be throttled by default. Also note that the init method
+	// has not been called yet, so the reset go routine is not running
+	l := atomicLimiter{
+		max:      max,
+		count:    max + 1,
+		interval: 1,
+	}
+
+	require.True(t, l.throttled())
+
+	// Test	the reset go routine by calling init() and waiting
+	// for it to reset the counter. The limiter will no longer
+	// be in a throttled state and the count will be reset.
+	l.init()
+	wait := 2 * l.interval
+	time.Sleep(time.Second * wait)
+	require.False(t, l.throttled())
+	require.Equal(t, uint64(0), l.count)
+}
+
+func TestThrottledCache(t *testing.T) {
+	c := newMemoryCache(3, 120)
+	require.False(t, c.limiter.throttled())
+	require.Equal(t, 4, int(c.limiter.limit()), "expected limit be cache size + 1")
+	require.Equal(t, float64(120), c.limiter.resetInterval().Seconds(), "expected reset interval to be 120 seconds")
+
+	// fill the cache and cause 100% evictions
+	for i := 1; i <= 6; i++ {
+		key := strconv.Itoa(i)
+		value := i
+		c.add(key, value)
+		require.False(t, c.limiter.throttled())
+	}
+
+	// limiter is incremented after cache is full. a cache of size 3
+	// with 6 additions will cause the limiter to be set to 3.
+	require.Equal(t, 3, int(c.limiter.currentCount()), "expected limit count to be 3 after 6 additions to the cache")
+
+	// 7th addition will be throttled because the cache
+	// has already reached 100% eviction rate
+	c.add("7", "should be limited")
+	require.True(t, c.limiter.throttled())
+
+	// 8th addition will skip adding to the cache
+	// because the 7th addition enabled the limiter
+	result := c.add("8", "add miss")
+	require.True(t, c.limiter.throttled())
+	require.False(t, result, "expected add to return false when cache writes are throttled")
 }

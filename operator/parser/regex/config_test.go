@@ -31,7 +31,7 @@ func TestRegexParserGoldenConfig(t *testing.T) {
 			Name: "cache",
 			Expect: func() *RegexParserConfig {
 				cfg := defaultCfg()
-				cfg.CacheConfig.CacheMaxSize = 50
+				cfg.Cache.Size = 50
 				return cfg
 			}(),
 		},

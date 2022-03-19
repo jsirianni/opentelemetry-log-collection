@@ -20,33 +20,24 @@ import (
 	"time"
 )
 
-// CacheConfig is a configuration for caching
-type CacheConfig struct {
-	// CacheMaxSize is the maximum number of entries a cache
-	// should retain before evicting old entries
-	CacheMaxSize uint16 `json:"size" yaml:"size"`
-}
-
 // cache allows operators to cache a value and look it up later
 type cache interface {
 	get(key string) interface{}
-	add(key string, data interface{})
+	add(key string, data interface{}) bool
 	copy() map[string]interface{}
 	maxSize() uint16
 }
 
-// newMemoryCache returns a new memory backed cache
-func newMemoryCache(maxSize uint16) *memoryCache {
-	// rate limiter will throttle when cache is above
-	// 100% turnover within the limit inteval
-	limitCount := uint64(maxSize) + 1
-	limitInterval := time.Second * 5
-	limiter := newStartedAtomicLimiter(limitCount, limitInterval)
+// newMemoryCache takes a cache size and a limiter interval and
+// returns a new memory backed cache
+func newMemoryCache(maxSize uint16, interval uint64) *memoryCache {
+	// start throttling when cache turnover is above 100%
+	limit := uint64(maxSize) + 1
 
 	return &memoryCache{
 		cache:   make(map[string]interface{}),
 		keys:    make(chan string, maxSize),
-		limiter: limiter,
+		limiter: newStartedAtomicLimiter(limit, interval),
 	}
 }
 
@@ -87,9 +78,9 @@ func (m *memoryCache) get(key string) interface{} {
 
 // add inserts an item into the cache, if the cache is full, the
 // oldest item is removed
-func (m *memoryCache) add(key string, data interface{}) {
+func (m *memoryCache) add(key string, data interface{}) bool {
 	if m.limiter.throttled() {
-		return
+		return false
 	}
 
 	m.mutex.Lock()
@@ -109,6 +100,7 @@ func (m *memoryCache) add(key string, data interface{}) {
 	// to the channel
 	m.cache[key] = data
 	m.keys <- key
+	return true
 }
 
 // copy returns a deep copy of the cache
@@ -134,15 +126,22 @@ func (m *memoryCache) maxSize() uint16 {
 type limiter interface {
 	init()
 	increment()
+	currentCount() uint64
+	limit() uint64
+	resetInterval() time.Duration
 	throttled() bool
 }
 
 // newStartedAtomicLimiter returns a started atomicLimiter
-func newStartedAtomicLimiter(max uint64, interval time.Duration) *atomicLimiter {
+func newStartedAtomicLimiter(max uint64, interval uint64) *atomicLimiter {
+	if interval == 0 {
+		interval = 30
+	}
+
 	a := &atomicLimiter{
 		count:    0,
 		max:      max,
-		interval: interval,
+		interval: time.Second * time.Duration(interval),
 	}
 
 	a.init()
@@ -161,13 +160,13 @@ type atomicLimiter struct {
 
 var _ limiter = (&atomicLimiter{})
 
-// init initializes the limiter runs the reset go routine
+// init initializes the limiter
 func (l *atomicLimiter) init() {
 	// start the reset go routine once
 	l.start.Do(func() {
 		go func() {
 			ticker := time.NewTicker(l.interval)
-			for _ = range ticker.C {
+			for range ticker.C {
 				atomic.SwapUint64(&l.count, 0)
 			}
 		}()
@@ -186,4 +185,16 @@ func (l *atomicLimiter) increment() {
 // not caching at all.
 func (l *atomicLimiter) throttled() bool {
 	return l.count >= l.max
+}
+
+func (l *atomicLimiter) currentCount() uint64 {
+	return l.count
+}
+
+func (l *atomicLimiter) limit() uint64 {
+	return l.max
+}
+
+func (l *atomicLimiter) resetInterval() time.Duration {
+	return l.interval
 }
