@@ -24,15 +24,12 @@ This operator makes use of [Go regular expression](https://github.com/google/re2
 
 ### Cache
 
-Regex is an expensive operation, caching is useful when parsing the same value repeatedly. For example, extracting fields derived from kubernetes pod log file names.
+Caching is useful when parsing the same value repeatedly. For example, extracting fields derived from kubernetes pod log file names.
 Enabling caching can have a negative effect on memory, therefore it is a good idea to limit the cache size to something realistic.
 
-If caching is enabled, the size
-
-| Field         | Default          | Description                                                     |
-| ---           | ---              | ---                                                             |
-| `type`        | optional         | Cache type to use. Currently, only `memory` cache is supported. |
-| `size`        | `100`            | Max number of items to keep in the cache. The cache will delete the oldest item to make room for a new item when max capacity is reached. |
+| Field     | Default   | Description |
+| ---       | ---       | ---         |
+| `size`    | `nil`     | Max number of items to keep in the cache. The cache will delete the oldest item to make room for a new item when max capacity is reached. |
 
 ### Example Configurations
 
